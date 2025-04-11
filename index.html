@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meeting Voice Input Demo</title>
+    <link rel="stylesheet" href="main.css" />
+    <link rel="stylesheet" href="meeting-setup.css" />
+  </head>
+  <body>
+    <header class="setup-header">
+      <h1>Voice-Powered Meeting Input</h1>
+      <p class="subtitle">
+        Record your thoughts and let AI populate the meeting fields
+      </p>
+    </header>
+
+    <main class="setup-container">
+      <div class="meeting-form">
+        <!-- Voice recording section -->
+        <div class="form-section voice-input-section">
+          <div class="section-header">
+            <div class="step-number">1</div>
+            <h2>Record Your Voice</h2>
+          </div>
+
+          <div class="voice-controls" style="display: block">
+            <div class="voice-status" id="statusContainer">
+              <div id="pulse" class="pulse-animation"></div>
+              <div id="statusText">Click to start</div>
+            </div>
+
+            <div class="generate-section">
+              <button id="recordBtn" class="btn btn-large btn-primary">
+                🎙️ Start Recording
+              </button>
+              <div class="voice-timer" id="timer">00:00</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Result section -->
+        <div class="form-section">
+          <div class="section-header">
+            <div class="step-number">2</div>
+            <h2>Auto-Populated Meeting Fields</h2>
+          </div>
+
+          <div class="form-group">
+            <label for="company">Company</label>
+            <textarea id="company"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="goal">Meeting Goal</label>
+            <textarea id="goal"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="location">Location</label>
+            <textarea id="location"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="background">Background</label>
+            <textarea id="background"></textarea>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      let mediaRecorder;
+      let audioChunks = [];
+      let isRecording = false;
+      let seconds = 0;
+      let timerInterval;
+
+      const recordBtn = document.getElementById("recordBtn");
+      const statusText = document.getElementById("statusText");
+      const pulse = document.getElementById("pulse");
+      const timer = document.getElementById("timer");
+
+      function updateTimer() {
+        seconds++;
+        const min = String(Math.floor(seconds / 60)).padStart(2, "0");
+        const sec = String(seconds % 60).padStart(2, "0");
+        timer.textContent = `${min}:${sec}`;
+      }
+
+      recordBtn.onclick = async () => {
+        if (!isRecording) {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+          mediaRecorder.onstop = async () => {
+            const blob = new Blob(audioChunks, { type: "audio/mp3" });
+            const formData = new FormData();
+            formData.append("audio", blob, "recording.mp3");
+
+            statusText.textContent = "Processing...";
+            pulse.classList.remove("recording");
+
+            const response = await fetch(
+              "http://localhost:5000/process-audio",
+              {
+                method: "POST",
+                body: formData,
+              }
+            );
+
+            const data = await response.json();
+
+            document.getElementById("company").value = data.company || "";
+            document.getElementById("goal").value = data.goal || "";
+            document.getElementById("location").value = data.location || "";
+            document.getElementById("background").value = data.background || "";
+
+            recordBtn.textContent = "🎙️ Start Recording";
+            statusText.textContent = "Click to start";
+            timer.textContent = "00:00";
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          recordBtn.textContent = "⏹️ Stop Recording";
+          statusText.textContent = "Recording...";
+          pulse.classList.add("recording");
+
+          seconds = 0;
+          timerInterval = setInterval(updateTimer, 1000);
+        } else {
+          mediaRecorder.stop();
+          isRecording = false;
+          clearInterval(timerInterval);
+        }
+      };
+    </script>
+  </body>
+</html>
